@@ -1,0 +1,87 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 20px;
+}
+
+h1 {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.main-container {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    border: 2px solid #333;
+}
+
+#webcam {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+#output_canvas {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+}
+
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+}
+
+.controls-container {
+    display: flex;
+    flex-direction: column;
+    margin-right: 20px;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.btn-exercise {
+    padding: 10px 20px;
+    font-size: 1em;
+    margin-bottom: 10px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #f0f0f0;
+}
+
+.btn-exercise.active {
+    background-color: #4CAF50;
+    color: white;
+    border-color: #4CAF50;
+}
+
+.rep-counter {
+    margin-top: 20px;
+    font-size: 1.2em;
+}
+
+#feedback {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #333;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 10px 20px;
+    border-radius: 10px;
+}
