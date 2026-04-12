@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Posture Corrector</title>
     <link rel="stylesheet" href="style.css">
+    <!-- MediaPipe Script Loading -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675469404/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675469404/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
 </head>
 <body>
     <h1>AI Posture Corrector</h1>
@@ -19,7 +23,8 @@
             </div>
         </div>
         <div class="container">
-            <video id="webcam" autoplay playsinline></video>
+            <!-- The video element is now hidden, we only show the canvas -->
+            <video id="webcam" autoplay playsinline style="display: none;"></video>
             <canvas id="output_canvas" width="1280" height="720"></canvas>
         </div>
         <div id="feedback">

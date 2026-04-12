@@ -1,3 +1,11 @@
+import { calculateAngle } from './utils.js';
+import { poses } from './poses.js';
+
+// Because we are loading the scripts in index.html, the objects are now available globally
+const { Pose, POSE_CONNECTIONS } = window;
+const { drawConnectors, drawLandmarks } = window;
+const { Camera } = window;
+
 // Get references to the HTML elements
 const videoElement = document.getElementById('webcam');
 const canvasElement = document.getElementById('output_canvas');
@@ -23,7 +31,7 @@ plankBtn.addEventListener('click', () => {
     updateActiveButton(plankBtn);
 });
 pushupBtn.addEventListener('click', () => {
-    currentPose = 'pushup'; // We'll check for 'up' or 'down' stage internally
+    currentPose = 'pushup';
     repCounter = 0;
     pushupStage = 'up';
     updateActiveButton(pushupBtn);
@@ -38,8 +46,9 @@ function updateActiveButton(activeBtn) {
     document.querySelectorAll('.btn-exercise').forEach(btn => btn.classList.remove('active'));
     activeBtn.classList.add('active');
     repCountElement.innerText = repCounter;
+    feedbackElement.innerHTML = `<p>Get into position for ${activeBtn.innerText}!</p>`;
+    lastSpokenFeedback = ""; // Reset speaker
 }
-
 
 // Text to Speech
 const speaker = new SpeechSynthesisUtterance();
@@ -51,18 +60,17 @@ function speak(text) {
     }
 }
 
-// This function will be called when the model returns its results
+// This function is the core of the application
 function onResults(results) {
-    // Clear the canvas
+    // We are using the results to draw on the canvas, not the raw video
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    // Draw the video frame on the canvas
+    canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-    // Draw the skeleton
     if (results.poseLandmarks) {
-        // --- Pose Analysis and Feedback ---
         const landmarks = results.poseLandmarks;
         let feedbackMessage = "Great Form!";
-        let feedbackGiven = false;
         let incorrectLandmarks = [];
 
         // Define all necessary landmarks
@@ -73,7 +81,6 @@ function onResults(results) {
             rightHip: landmarks[24], rightKnee: landmarks[26], rightAnkle: landmarks[28]
         };
 
-        // Calculate all necessary angles
         const angles = {
             left_knee_angle: calculateAngle(points.leftHip, points.leftKnee, points.leftAnkle),
             right_knee_angle: calculateAngle(points.rightHip, points.rightKnee, points.rightAnkle),
@@ -83,10 +90,8 @@ function onResults(results) {
             right_elbow_angle: calculateAngle(points.rightShoulder, points.rightElbow, points.rightWrist)
         };
         
-        // --- Logic for different poses ---
         let poseRules;
         if (currentPose === 'pushup') {
-            // Pushup logic with state machine
             poseRules = poses[`pushup_${pushupStage}`];
             const elbowAngle = (angles.left_elbow_angle + angles.right_elbow_angle) / 2;
             if (pushupStage === 'up' && elbowAngle < 100) {
@@ -100,107 +105,71 @@ function onResults(results) {
             poseRules = poses[currentPose];
         }
 
-        // Compare live angles to the pose rules
         if (poseRules) {
             for (const [angleName, angleValue] of Object.entries(angles)) {
                 if (poseRules[angleName]) {
                     const rule = poseRules[angleName];
+                    const incorrectPoints = [];
                     if (angleValue < rule.range[0] && rule.feedback_low) {
                         feedbackMessage = rule.feedback_low;
-                        feedbackGiven = true;
-                        // Add relevant landmarks to the incorrect list
-                        if(angleName.includes('knee')) incorrectLandmarks.push(landmarks[25], landmarks[26]);
-                        if(angleName.includes('hip')) incorrectLandmarks.push(landmarks[23], landmarks[24]);
-                        if(angleName.includes('elbow')) incorrectLandmarks.push(landmarks[13], landmarks[14]);
-                        break; 
+                        if(angleName.includes('knee')) incorrectPoints.push(points.leftKnee, points.rightKnee);
+                        if(angleName.includes('hip')) incorrectPoints.push(points.leftHip, points.rightHip);
+                        if(angleName.includes('elbow')) incorrectPoints.push(points.leftElbow, points.rightElbow);
                     } else if (angleValue > rule.range[1] && rule.feedback_high) {
                         feedbackMessage = rule.feedback_high;
-                        feedbackGiven = true;
-                        if(angleName.includes('knee')) incorrectLandmarks.push(landmarks[25], landmarks[26]);
-                        if(angleName.includes('hip')) incorrectLandmarks.push(landmarks[23], landmarks[24]);
-                        if(angleName.includes('elbow')) incorrectLandmarks.push(landmarks[13], landmarks[14]);
+                        if(angleName.includes('knee')) incorrectPoints.push(points.leftKnee, points.rightKnee);
+                        if(angleName.includes('hip')) incorrectPoints.push(points.leftHip, points.rightHip);
+                        if(angleName.includes('elbow')) incorrectPoints.push(points.leftElbow, points.rightElbow);
+                    }
+                    if (incorrectPoints.length > 0) {
+                        incorrectLandmarks.push(...incorrectPoints);
                         break;
                     }
                 }
             }
         }
 
-        // Update UI and speak feedback
         feedbackElement.innerHTML = `<p>${feedbackMessage}</p>`;
         speak(feedbackMessage);
 
-        // --- Drawing ---
-        // Draw the main skeleton
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-        // Draw all landmarks in a base color
-        drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 5 });
-        // Draw the incorrect landmarks in a highlight color
-        if (feedbackGiven) {
+        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 2, radius: 5 });
+        if (incorrectLandmarks.length > 0) {
             drawLandmarks(canvasCtx, incorrectLandmarks, { color: '#FFFF00', lineWidth: 2, radius: 8 });
         }
 
     } else {
-        feedbackElement.innerHTML = "<p>No person detected. Please stand in front of the camera.</p>";
+        feedbackElement.innerHTML = "<p>No person detected.</p>";
     }
     canvasCtx.restore();
 }
 
+// --- Main Application Setup ---
 
-// Function to start the webcam
-async function startWebcam() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 1280, height: 720 }
-        });
-        videoElement.srcObject = stream;
-        
-        return new Promise((resolve) => {
-            videoElement.onloadedmetadata = () => {
-                resolve(videoElement);
-            };
-        });
-    } catch (err) {
-        console.error("Error accessing webcam: ", err);
-        feedbackElement.innerHTML = "<p>Error: Webcam access denied. Please allow camera access and refresh the page.</p>";
-    }
-}
+feedbackElement.innerHTML = "<p>Initializing...</p>";
 
-// Main function to run the application
-async function main() {
-    feedbackElement.innerHTML = "<p>Please grant webcam access...</p>";
-    updateActiveButton(plankBtn); // Set Plank as default active
-    const video = await startWebcam();
-    
-    if (video) {
-        feedbackElement.innerHTML = "<p>Webcam active. Initializing AI model...</p>";
+const pose = new Pose({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`,
+});
 
-        const pose = new Pose({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`;
-            }
-        });
+pose.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+});
 
-        pose.setOptions({
-            modelComplexity: 1,
-            smoothLandmarks: true,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
+pose.onResults(onResults);
 
-        pose.onResults(onResults);
+const camera = new Camera(videoElement, {
+    onFrame: async () => {
+        await pose.send({ image: videoElement });
+    },
+    width: 1280,
+    height: 720
+});
 
-        feedbackElement.innerHTML = "<p>AI Model loaded. Get into a high plank position!</p>";
+camera.start();
 
-        async function predictWebcam() {
-            if (video.readyState >= 3) {
-                await pose.send({ image: video });
-            }
-            requestAnimationFrame(predictWebcam);
-        }
-
-        predictWebcam();
-    }
-}
-
-// Run the main function when the page loads
-main();
+feedbackElement.innerHTML = "<p>AI Model Loaded. Select an exercise!</p>";
+updateActiveButton(plankBtn);
