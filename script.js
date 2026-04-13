@@ -1,162 +1,56 @@
 (function () {
-    // Get references to the HTML elements
     var videoElement = document.getElementById('webcam');
     var canvasElement = document.getElementById('output_canvas');
     var canvasCtx = canvasElement.getContext('2d');
     var feedbackElement = document.getElementById('feedback');
     var repCountElement = document.getElementById('rep-count');
 
-    // UI Buttons
     var plankBtn = document.getElementById('plankBtn');
     var pushupBtn = document.getElementById('pushupBtn');
     var lungeBtn = document.getElementById('lungeBtn');
 
-    // Global state
-    var lastSpokenFeedback = "";
-    var currentPose = "plank";
+    // --- Constants ---
+    var MIN_VISIBILITY = 0.55;
+
+    // Body-only landmark indices (no face, no hands/feet detail)
+    var BODY_LANDMARKS = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+
+    // Custom bone connections (body skeleton only)
+    var BODY_CONNECTIONS = [
+        [11, 12], // shoulder to shoulder
+        [11, 23], // left shoulder to left hip
+        [12, 24], // right shoulder to right hip
+        [23, 24], // hip to hip
+        [11, 13], // left upper arm
+        [13, 15], // left forearm
+        [12, 14], // right upper arm
+        [14, 16], // right forearm
+        [23, 25], // left thigh
+        [25, 27], // left shin
+        [24, 26], // right thigh
+        [26, 28]  // right shin
+    ];
+
+    // Required landmarks per exercise for visibility check
+    var requiredLandmarks = {
+        plank:  [11, 12, 23, 24, 25, 26, 27, 28],
+        pushup: [11, 12, 13, 14, 15, 16, 23, 24, 25, 26],
+        lunge:  [11, 12, 23, 24, 25, 26, 27, 28]
+    };
+
+    var positionGuide = {
+        plank: 'Get into a plank: arms straight, body in a line. Face the camera from the side.',
+        pushup: 'Get into pushup position: arms straight, body in a line. Face the camera from the side.',
+        lunge: 'Stand sideways to the camera. Step one foot forward and lower your hips.'
+    };
+
+    // --- State ---
+    var lastSpokenFeedback = '';
+    var currentPose = 'plank';
     var repCounter = 0;
     var pushupStage = 'up';
 
-    // Minimum visibility confidence for a landmark to count as "visible"
-    var MIN_VISIBILITY = 0.6;
-
-    // Which landmark indices are required to be visible for each exercise
-    // MediaPipe pose landmark indices:
-    // 11=left_shoulder, 12=right_shoulder, 13=left_elbow, 14=right_elbow,
-    // 15=left_wrist, 16=right_wrist, 23=left_hip, 24=right_hip,
-    // 25=left_knee, 26=right_knee, 27=left_ankle, 28=right_ankle
-    var requiredLandmarks = {
-        plank:  [11, 12, 23, 24, 25, 26, 27, 28],          // shoulders, hips, knees, ankles
-        pushup: [11, 12, 13, 14, 15, 16, 23, 24, 25, 26],  // shoulders, elbows, wrists, hips, knees
-        lunge:  [23, 24, 25, 26, 27, 28]                    // hips, knees, ankles
-    };
-
-    // What body orientation roughly looks like for each exercise
-    // We check if the person is roughly horizontal (plank/pushup) or vertical (lunge)
-    function detectBodyOrientation(landmarks) {
-        var lShoulder = landmarks[11];
-        var rShoulder = landmarks[12];
-        var lAnkle = landmarks[27];
-        var rAnkle = landmarks[28];
-        var lHip = landmarks[23];
-        var rHip = landmarks[24];
-
-        // Average shoulder and ankle/hip positions
-        var shoulderY = (lShoulder.y + rShoulder.y) / 2;
-        var hipY = (lHip.y + rHip.y) / 2;
-        var ankleY = (lAnkle.y + rAnkle.y) / 2;
-
-        var shoulderX = (lShoulder.x + rShoulder.x) / 2;
-        var hipX = (lHip.x + rHip.x) / 2;
-        var ankleX = (lAnkle.x + rAnkle.x) / 2;
-
-        // Vertical span (shoulder to ankle in Y) vs horizontal span
-        var verticalSpan = Math.abs(ankleY - shoulderY);
-        var horizontalSpan = Math.abs(ankleX - shoulderX);
-
-        // If horizontal span > vertical span, body is roughly horizontal
-        if (horizontalSpan > verticalSpan * 0.8) {
-            return 'horizontal';
-        }
-        // If the torso is mostly upright
-        if (verticalSpan > horizontalSpan * 0.8) {
-            return 'vertical';
-        }
-        return 'unknown';
-    }
-
-    // Check if user is roughly in the right position for the selected exercise
-    function isInExercisePosition(landmarks, exercise) {
-        var orientation = detectBodyOrientation(landmarks);
-
-        var lHip = landmarks[23];
-        var rHip = landmarks[24];
-        var lKnee = landmarks[25];
-        var rKnee = landmarks[26];
-        var lShoulder = landmarks[11];
-        var rShoulder = landmarks[12];
-
-        var hipY = (lHip.y + rHip.y) / 2;
-        var shoulderY = (lShoulder.y + rShoulder.y) / 2;
-        var kneeY = (lKnee.y + rKnee.y) / 2;
-
-        if (exercise === 'plank' || exercise === 'pushup') {
-            // For plank/pushup, body should be roughly horizontal
-            // and hands should be on the ground (wrists below shoulders)
-            return orientation === 'horizontal';
-        }
-
-        if (exercise === 'lunge') {
-            // For lunge, body should be roughly vertical (upright torso)
-            // and at least one knee should be significantly bent
-            if (orientation !== 'vertical') return false;
-
-            // Check if hips are lowered (below normal standing — hips closer to knees)
-            var hipToKneeRatio = Math.abs(kneeY - hipY);
-            var shoulderToHipRatio = Math.abs(hipY - shoulderY);
-            // In a lunge the hips drop, so hip-to-knee distance shrinks relative to shoulder-to-hip
-            return hipToKneeRatio < shoulderToHipRatio * 1.2;
-        }
-
-        return false;
-    }
-
-    // Check how many required landmarks are visible
-    function checkBodyVisibility(landmarks, exercise) {
-        var required = requiredLandmarks[exercise] || requiredLandmarks.plank;
-        var visibleCount = 0;
-        var missingParts = [];
-
-        for (var i = 0; i < required.length; i++) {
-            var idx = required[i];
-            var lm = landmarks[idx];
-            if (lm && lm.visibility >= MIN_VISIBILITY) {
-                visibleCount++;
-            } else {
-                missingParts.push(idx);
-            }
-        }
-
-        return {
-            ratio: visibleCount / required.length,
-            visibleCount: visibleCount,
-            totalRequired: required.length,
-            missingParts: missingParts
-        };
-    }
-
-    // Convert missing landmark indices to human-readable body part names
-    function describeMissingParts(missingIndices) {
-        var partNames = {
-            11: 'left shoulder', 12: 'right shoulder',
-            13: 'left elbow', 14: 'right elbow',
-            15: 'left wrist', 16: 'right wrist',
-            23: 'left hip', 24: 'right hip',
-            25: 'left knee', 26: 'right knee',
-            27: 'left ankle', 28: 'right ankle'
-        };
-        // Group into body regions
-        var regions = [];
-        var hasUpper = false, hasLower = false;
-        for (var i = 0; i < missingIndices.length; i++) {
-            var idx = missingIndices[i];
-            if (idx <= 16) hasUpper = true;
-            if (idx >= 23) hasLower = true;
-        }
-        if (hasLower && hasUpper) return 'your full body';
-        if (hasLower) return 'your legs and hips';
-        if (hasUpper) return 'your arms and shoulders';
-        return 'some body parts';
-    }
-
-    // Guidance text for getting into position
-    var positionGuide = {
-        plank: 'Get into a plank: arms straight, body in a line, face the camera from the side.',
-        pushup: 'Get into pushup position: arms straight, body in a line, face the camera from the side.',
-        lunge: 'Stand facing the camera from the side, then step one foot forward and lower your hips.'
-    };
-
-    // --- Event Listeners for UI ---
+    // --- UI ---
     plankBtn.addEventListener('click', function () {
         currentPose = 'plank';
         repCounter = 0;
@@ -181,16 +75,16 @@
         }
         activeBtn.classList.add('active');
         repCountElement.innerText = repCounter;
-        feedbackElement.innerHTML = '<p>' + positionGuide[currentPose] + '</p>';
-        lastSpokenFeedback = "";
+        setFeedback(positionGuide[currentPose], '#42a5f5');
+        lastSpokenFeedback = '';
     }
 
-    // Text to Speech
+    // --- Speech ---
     var speaker = new SpeechSynthesisUtterance();
     speaker.rate = 1.0;
     speaker.lang = 'en-US';
     var lastSpeakTime = 0;
-    var SPEAK_COOLDOWN = 3000; // Don't repeat audio more than once every 3 seconds
+    var SPEAK_COOLDOWN = 3000;
 
     function speak(text) {
         var now = Date.now();
@@ -203,56 +97,216 @@
         }
     }
 
-    // Core pose analysis callback
+    // --- Helpers ---
+
+    function setFeedback(message, color) {
+        feedbackElement.innerHTML = '<p>' + message + '</p>';
+        feedbackElement.style.borderLeftColor = color;
+    }
+
+    function checkBodyVisibility(landmarks, exercise) {
+        var required = requiredLandmarks[exercise] || requiredLandmarks.plank;
+        var visibleCount = 0;
+        for (var i = 0; i < required.length; i++) {
+            if (landmarks[required[i]] && landmarks[required[i]].visibility >= MIN_VISIBILITY) {
+                visibleCount++;
+            }
+        }
+        return visibleCount / required.length;
+    }
+
+    // Determine if hip is sagging or piking relative to shoulder-ankle line
+    function isHipSagging(shoulder, hip, ankle) {
+        var dx = ankle.x - shoulder.x;
+        if (Math.abs(dx) < 0.01) return false; // near-vertical view, can't tell
+        var t = (hip.x - shoulder.x) / dx;
+        var expectedY = shoulder.y + t * (ankle.y - shoulder.y);
+        // In normalized coords, Y increases downward. Hip below line = sagging.
+        return hip.y > expectedY + 0.02;
+    }
+
+    // Angle-based position detection
+    function isInExercisePosition(landmarks, exercise) {
+        var lShoulder = landmarks[11], rShoulder = landmarks[12];
+        var lHip = landmarks[23], rHip = landmarks[24];
+        var lKnee = landmarks[25], rKnee = landmarks[26];
+        var lAnkle = landmarks[27], rAnkle = landmarks[28];
+
+        var midShoulderX = (lShoulder.x + rShoulder.x) / 2;
+        var midShoulderY = (lShoulder.y + rShoulder.y) / 2;
+        var midHipX = (lHip.x + rHip.x) / 2;
+        var midHipY = (lHip.y + rHip.y) / 2;
+        var midAnkleX = (lAnkle.x + rAnkle.x) / 2;
+        var midAnkleY = (lAnkle.y + rAnkle.y) / 2;
+
+        // Torso angle from vertical: 0 = upright, 90 = horizontal
+        var torsoAngle = Math.abs(Math.atan2(
+            midHipX - midShoulderX,
+            midHipY - midShoulderY
+        )) * (180 / Math.PI);
+
+        if (exercise === 'plank' || exercise === 'pushup') {
+            // Torso should be far from vertical (> 45 deg)
+            if (torsoAngle < 45) return false;
+            // Shoulder-hip-ankle should be roughly straight (> 140 deg)
+            var bodyLineAngle = calculateAngle(
+                { x: midShoulderX, y: midShoulderY },
+                { x: midHipX, y: midHipY },
+                { x: midAnkleX, y: midAnkleY }
+            );
+            return bodyLineAngle > 140;
+        }
+
+        if (exercise === 'lunge') {
+            // Torso should be mostly upright (< 35 deg from vertical)
+            if (torsoAngle > 35) return false;
+            // At least one knee should be significantly bent
+            var leftKneeAngle = calculateAngle(lHip, lKnee, lAnkle);
+            var rightKneeAngle = calculateAngle(rHip, rKnee, rAnkle);
+            return leftKneeAngle < 140 || rightKneeAngle < 140;
+        }
+
+        return false;
+    }
+
+    // --- Custom Skeleton Drawing (body only, no face) ---
+
+    function drawSkeleton(landmarks, incorrectIndices) {
+        var w = canvasElement.width;
+        var h = canvasElement.height;
+
+        // Build set of incorrect indices for fast lookup
+        var errSet = {};
+        for (var e = 0; e < incorrectIndices.length; e++) {
+            errSet[incorrectIndices[e]] = true;
+        }
+
+        // Draw bone connections
+        for (var c = 0; c < BODY_CONNECTIONS.length; c++) {
+            var si = BODY_CONNECTIONS[c][0];
+            var ei = BODY_CONNECTIONS[c][1];
+            var sLm = landmarks[si];
+            var eLm = landmarks[ei];
+
+            if (sLm.visibility < MIN_VISIBILITY || eLm.visibility < MIN_VISIBILITY) continue;
+
+            var isErr = errSet[si] || errSet[ei];
+
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(sLm.x * w, sLm.y * h);
+            canvasCtx.lineTo(eLm.x * w, eLm.y * h);
+            canvasCtx.strokeStyle = isErr ? '#FF4444' : '#00FF88';
+            canvasCtx.lineWidth = isErr ? 5 : 3;
+            canvasCtx.stroke();
+        }
+
+        // Draw joint dots (body only)
+        for (var j = 0; j < BODY_LANDMARKS.length; j++) {
+            var idx = BODY_LANDMARKS[j];
+            var lm = landmarks[idx];
+            if (lm.visibility < MIN_VISIBILITY) continue;
+
+            var isErrJoint = errSet[idx];
+            canvasCtx.beginPath();
+            canvasCtx.arc(lm.x * w, lm.y * h, isErrJoint ? 9 : 5, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = isErrJoint ? '#FFFF00' : '#FFFFFF';
+            canvasCtx.fill();
+            canvasCtx.strokeStyle = isErrJoint ? '#FF4444' : '#00AA66';
+            canvasCtx.lineWidth = 2;
+            canvasCtx.stroke();
+        }
+    }
+
+    // --- Core Results Callback ---
+
     function onResults(results) {
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
         canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-        if (results.poseLandmarks) {
-            var landmarks = results.poseLandmarks;
-            var feedbackMessage = '';
-            var feedbackColor = '#fff';
-            var incorrectLandmarks = [];
+        if (!results.poseLandmarks) {
+            setFeedback('No person detected. Step into the frame.', '#ff9800');
+            canvasCtx.restore();
+            return;
+        }
 
-            // STEP 1: Check if enough of the body is visible
-            var exercise = (currentPose === 'pushup') ? 'pushup' : currentPose;
-            var visibility = checkBodyVisibility(landmarks, exercise);
+        var landmarks = results.poseLandmarks;
+        var incorrectIndices = [];
+        var exercise = (currentPose === 'pushup') ? 'pushup' : currentPose;
 
-            if (visibility.ratio < 0.6) {
-                // Not enough body visible
-                var missingDesc = describeMissingParts(visibility.missingParts);
-                feedbackMessage = 'Step back so the camera can see ' + missingDesc + '.';
-                feedbackColor = '#ff9800';
+        // STEP 1: Body visibility check
+        var visRatio = checkBodyVisibility(landmarks, exercise);
+        if (visRatio < 0.6) {
+            setFeedback('Step back so the camera can see your full body.', '#ff9800');
+            speak('Step back so the camera can see your full body.');
+            drawSkeleton(landmarks, incorrectIndices);
+            canvasCtx.restore();
+            return;
+        }
 
-                setFeedback(feedbackMessage, feedbackColor);
-                speak(feedbackMessage);
-                drawSkeleton(landmarks, incorrectLandmarks);
-                canvasCtx.restore();
-                return;
-            }
+        // STEP 2: Exercise position check
+        if (!isInExercisePosition(landmarks, exercise)) {
+            setFeedback(positionGuide[currentPose], '#42a5f5');
+            speak(positionGuide[currentPose]);
+            drawSkeleton(landmarks, incorrectIndices);
+            canvasCtx.restore();
+            return;
+        }
 
-            // STEP 2: Check if user is in the right position for this exercise
-            if (!isInExercisePosition(landmarks, exercise)) {
-                feedbackMessage = positionGuide[currentPose];
-                feedbackColor = '#42a5f5';
+        // STEP 3: Calculate angles and evaluate form
+        var points = {
+            leftShoulder: landmarks[11], leftElbow: landmarks[13], leftWrist: landmarks[15],
+            leftHip: landmarks[23], leftKnee: landmarks[25], leftAnkle: landmarks[27],
+            rightShoulder: landmarks[12], rightElbow: landmarks[14], rightWrist: landmarks[16],
+            rightHip: landmarks[24], rightKnee: landmarks[26], rightAnkle: landmarks[28]
+        };
 
-                setFeedback(feedbackMessage, feedbackColor);
-                speak(feedbackMessage);
-                drawSkeleton(landmarks, incorrectLandmarks);
-                canvasCtx.restore();
-                return;
-            }
+        var angles, angleLandmarkMap, poseRules;
 
-            // STEP 3: User is in position — evaluate form
-            var points = {
-                leftShoulder: landmarks[11], leftElbow: landmarks[13], leftWrist: landmarks[15],
-                leftHip: landmarks[23], leftKnee: landmarks[25], leftAnkle: landmarks[27],
-                rightShoulder: landmarks[12], rightElbow: landmarks[14], rightWrist: landmarks[16],
-                rightHip: landmarks[24], rightKnee: landmarks[26], rightAnkle: landmarks[28]
+        if (currentPose === 'lunge') {
+            // Determine front vs back leg (front = more bent knee)
+            var lKneeA = calculateAngle(points.leftHip, points.leftKnee, points.leftAnkle);
+            var rKneeA = calculateAngle(points.rightHip, points.rightKnee, points.rightAnkle);
+
+            var front = (lKneeA < rKneeA) ? 'left' : 'right';
+            var back = (front === 'left') ? 'right' : 'left';
+
+            var midShoulder = {
+                x: (points.leftShoulder.x + points.rightShoulder.x) / 2,
+                y: (points.leftShoulder.y + points.rightShoulder.y) / 2
+            };
+            var midHip = {
+                x: (points.leftHip.x + points.rightHip.x) / 2,
+                y: (points.leftHip.y + points.rightHip.y) / 2
+            };
+            // Virtual point directly below hip for torso-upright measurement
+            var belowHip = { x: midHip.x, y: midHip.y + 0.1 };
+
+            angles = {
+                front_knee_angle: (front === 'left') ? lKneeA : rKneeA,
+                back_knee_angle: (front === 'left') ? rKneeA : lKneeA,
+                front_hip_angle: calculateAngle(
+                    points[front + 'Shoulder'], points[front + 'Hip'], points[front + 'Knee']
+                ),
+                torso_upright: calculateAngle(midShoulder, midHip, belowHip)
             };
 
-            var angles = {
+            var fKneeIdx = (front === 'left') ? 25 : 26;
+            var bKneeIdx = (front === 'left') ? 26 : 25;
+            var fHipIdx = (front === 'left') ? 23 : 24;
+
+            angleLandmarkMap = {
+                'front_knee_angle': [fKneeIdx],
+                'back_knee_angle': [bKneeIdx],
+                'front_hip_angle': [fHipIdx],
+                'torso_upright': [11, 12, 23, 24]
+            };
+
+            poseRules = poses.lunge;
+
+        } else {
+            // Plank / Pushup
+            angles = {
                 left_knee_angle: calculateAngle(points.leftHip, points.leftKnee, points.leftAnkle),
                 right_knee_angle: calculateAngle(points.rightHip, points.rightKnee, points.rightAnkle),
                 left_hip_angle: calculateAngle(points.leftShoulder, points.leftHip, points.leftKnee),
@@ -261,80 +315,103 @@
                 right_elbow_angle: calculateAngle(points.rightShoulder, points.rightElbow, points.rightWrist)
             };
 
-            var poseRules;
+            angleLandmarkMap = {
+                'left_knee_angle': [25], 'right_knee_angle': [26],
+                'left_hip_angle': [23], 'right_hip_angle': [24],
+                'left_elbow_angle': [13], 'right_elbow_angle': [14]
+            };
+
             if (currentPose === 'pushup') {
                 poseRules = poses['pushup_' + pushupStage];
-                var elbowAngle = (angles.left_elbow_angle + angles.right_elbow_angle) / 2;
-                if (pushupStage === 'up' && elbowAngle < 100) {
+                var avgElbow = (angles.left_elbow_angle + angles.right_elbow_angle) / 2;
+                if (pushupStage === 'up' && avgElbow < 100) {
                     pushupStage = 'down';
-                } else if (pushupStage === 'down' && elbowAngle > 160) {
+                } else if (pushupStage === 'down' && avgElbow > 160) {
                     pushupStage = 'up';
                     repCounter++;
                     repCountElement.innerText = repCounter;
                 }
             } else {
-                poseRules = poses[currentPose];
+                poseRules = poses.plank;
             }
+        }
 
-            // Default to good form — only override if a rule is violated
-            feedbackMessage = 'Great Form! Hold it.';
-            feedbackColor = '#4caf50';
+        // Collect ALL violations
+        var violations = [];
+        if (poseRules) {
+            var angleNames = Object.keys(angles);
+            for (var i = 0; i < angleNames.length; i++) {
+                var name = angleNames[i];
+                var value = angles[name];
+                var rule = poseRules[name];
+                if (!rule) continue;
 
-            if (poseRules) {
-                var angleNames = Object.keys(angles);
-                for (var i = 0; i < angleNames.length; i++) {
-                    var angleName = angleNames[i];
-                    var angleValue = angles[angleName];
-                    if (poseRules[angleName]) {
-                        var rule = poseRules[angleName];
-                        var badPoints = [];
-                        if (angleValue < rule.range[0] && rule.feedback_low) {
-                            feedbackMessage = rule.feedback_low;
-                            feedbackColor = '#ff5252';
-                            if (angleName.indexOf('knee') !== -1) badPoints.push(points.leftKnee, points.rightKnee);
-                            if (angleName.indexOf('hip') !== -1) badPoints.push(points.leftHip, points.rightHip);
-                            if (angleName.indexOf('elbow') !== -1) badPoints.push(points.leftElbow, points.rightElbow);
-                        } else if (angleValue > rule.range[1] && rule.feedback_high) {
-                            feedbackMessage = rule.feedback_high;
-                            feedbackColor = '#ff5252';
-                            if (angleName.indexOf('knee') !== -1) badPoints.push(points.leftKnee, points.rightKnee);
-                            if (angleName.indexOf('hip') !== -1) badPoints.push(points.leftHip, points.rightHip);
-                            if (angleName.indexOf('elbow') !== -1) badPoints.push(points.leftElbow, points.rightElbow);
+                var deviation = 0;
+                var msg = null;
+
+                if (value < rule.range[0]) {
+                    deviation = rule.range[0] - value;
+
+                    // Special hip sagging detection for plank/pushup
+                    if ((currentPose === 'plank' || currentPose === 'pushup') && name.indexOf('hip') !== -1) {
+                        var side = (name.indexOf('left') !== -1) ? 'left' : 'right';
+                        if (isHipSagging(points[side + 'Shoulder'], points[side + 'Hip'], points[side + 'Ankle'])) {
+                            msg = 'Raise your hips. They are sagging.';
+                        } else {
+                            msg = 'Lower your hips. They are too high.';
                         }
-                        if (badPoints.length > 0) {
-                            incorrectLandmarks = incorrectLandmarks.concat(badPoints);
-                            break;
-                        }
+                    } else if (rule.feedback_low) {
+                        msg = rule.feedback_low;
+                    }
+                } else if (value > rule.range[1]) {
+                    deviation = value - rule.range[1];
+
+                    if ((currentPose === 'plank' || currentPose === 'pushup') && name.indexOf('hip') !== -1) {
+                        // Angle > 180 range max shouldn't happen, but handle it
+                        msg = 'Lower your hips slightly.';
+                    } else if (rule.feedback_high) {
+                        msg = rule.feedback_high;
                     }
                 }
+
+                if (msg) {
+                    var badIdx = angleLandmarkMap[name] || [];
+                    violations.push({
+                        message: msg,
+                        severity: rule.severity || 1,
+                        deviation: deviation,
+                        landmarks: badIdx
+                    });
+                }
             }
-
-            setFeedback(feedbackMessage, feedbackColor);
-            speak(feedbackMessage);
-            drawSkeleton(landmarks, incorrectLandmarks);
-
-        } else {
-            feedbackElement.innerHTML = '<p>No person detected. Step into the frame.</p>';
-            feedbackElement.style.borderLeft = '4px solid #ff9800';
         }
+
+        // Show highest-priority violation, highlight ALL bad joints
+        var feedbackMessage = 'Great Form! Hold it.';
+        var feedbackColor = '#4caf50';
+
+        if (violations.length > 0) {
+            violations.sort(function (a, b) {
+                if (b.severity !== a.severity) return b.severity - a.severity;
+                return b.deviation - a.deviation;
+            });
+            feedbackMessage = violations[0].message;
+            feedbackColor = '#ff5252';
+            for (var v = 0; v < violations.length; v++) {
+                for (var li = 0; li < violations[v].landmarks.length; li++) {
+                    incorrectIndices.push(violations[v].landmarks[li]);
+                }
+            }
+        }
+
+        setFeedback(feedbackMessage, feedbackColor);
+        speak(feedbackMessage);
+        drawSkeleton(landmarks, incorrectIndices);
         canvasCtx.restore();
     }
 
-    function setFeedback(message, color) {
-        feedbackElement.innerHTML = '<p>' + message + '</p>';
-        feedbackElement.style.borderLeft = '4px solid ' + color;
-    }
-
-    function drawSkeleton(landmarks, incorrectLandmarks) {
-        window.drawConnectors(canvasCtx, landmarks, window.POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-        window.drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 2, radius: 5 });
-        if (incorrectLandmarks.length > 0) {
-            window.drawLandmarks(canvasCtx, incorrectLandmarks, { color: '#FFFF00', lineWidth: 2, radius: 10 });
-        }
-    }
-
     // --- Initialization ---
-    feedbackElement.innerHTML = '<p>Webcam active. Initializing AI model...</p>';
+    feedbackElement.innerHTML = '<p>Initializing AI model...</p>';
 
     var pose = new window.Pose({
         locateFile: function (file) {
@@ -352,7 +429,6 @@
 
     pose.onResults(onResults);
 
-    // Initialize the model, then start camera
     pose.initialize().then(function () {
         feedbackElement.innerHTML = '<p>AI Model loaded. Starting camera...</p>';
 
@@ -365,15 +441,22 @@
         });
 
         camera.start().then(function () {
-            canvasElement.width = 1280;
-            canvasElement.height = 720;
-            feedbackElement.innerHTML = '<p>' + positionGuide[currentPose] + '</p>';
+            // Size canvas to viewport
+            canvasElement.width = window.innerWidth;
+            canvasElement.height = window.innerHeight;
+            setFeedback(positionGuide[currentPose], '#42a5f5');
         }).catch(function (err) {
             console.error('Camera start failed:', err);
-            feedbackElement.innerHTML = '<p>Camera access denied. Please allow camera access and reload.</p>';
+            setFeedback('Camera access denied. Allow camera and reload.', '#ff5252');
         });
     }).catch(function (err) {
         console.error('Pose model failed to load:', err);
-        feedbackElement.innerHTML = '<p>Failed to load AI model. Check your internet connection and reload.</p>';
+        setFeedback('Failed to load AI model. Check internet and reload.', '#ff5252');
+    });
+
+    // Keep canvas sized to viewport on resize
+    window.addEventListener('resize', function () {
+        canvasElement.width = window.innerWidth;
+        canvasElement.height = window.innerHeight;
     });
 })();

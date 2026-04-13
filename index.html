@@ -2,33 +2,29 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="screen-orientation" content="landscape">
     <title>AI Posture Corrector</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>AI Posture Corrector</h1>
-    <div class="main-container">
-        <div class="controls-container">
-            <h2>Select Exercise</h2>
-            <button id="plankBtn" class="btn-exercise active">Plank</button>
-            <button id="pushupBtn" class="btn-exercise">Pushups</button>
-            <button id="lungeBtn" class="btn-exercise">Lunges</button>
-            <div class="rep-counter">
-                <h3>REPS: <span id="rep-count">0</span></h3>
-            </div>
-        </div>
-        <div class="video-wrapper">
-            <video id="webcam" autoplay playsinline></video>
-            <canvas id="output_canvas"></canvas>
-            <div id="feedback">
-                <p>Loading...</p>
-            </div>
-        </div>
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output_canvas"></canvas>
+
+    <div id="controls-overlay">
+        <button id="plankBtn" class="btn-exercise active">Plank</button>
+        <button id="pushupBtn" class="btn-exercise">Pushups</button>
+        <button id="lungeBtn" class="btn-exercise">Lunges</button>
+        <div class="rep-counter">REPS: <span id="rep-count">0</span></div>
     </div>
-    <!-- Load MediaPipe and app scripts at end of body -->
+
+    <div id="feedback"><p>Loading...</p></div>
+
+    <div id="portrait-warning">
+        <p>Please rotate your device to landscape mode</p>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js" crossorigin="anonymous"></script>
     <script src="utils.js"></script>
     <script src="poses.js"></script>
