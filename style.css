@@ -31,6 +31,86 @@ html, body {
     z-index: 1;
 }
 
+/* --- Guide Overlay --- */
+#guide-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    transition: opacity 0.4s;
+}
+
+#guide-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#guide_canvas {
+    width: 380px;
+    height: 320px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+#guide-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    max-width: 320px;
+}
+
+#guide-view-tag {
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 20px;
+    background: rgba(66, 165, 245, 0.25);
+    border: 1px solid rgba(66, 165, 245, 0.5);
+    color: #42a5f5;
+    font-size: 0.85em;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+#guide-title {
+    font-size: 2em;
+    font-weight: bold;
+    color: #fff;
+}
+
+#guide-instructions {
+    font-size: 1.05em;
+    color: rgba(255, 255, 255, 0.75);
+    line-height: 1.5;
+}
+
+#guide-start-btn {
+    padding: 12px 32px;
+    font-size: 1.1em;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    background: #e94560;
+    color: #fff;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 0.2s;
+}
+
+#guide-start-btn:hover {
+    background: #d63850;
+}
+
+/* --- Controls Overlay --- */
 #controls-overlay {
     position: fixed;
     top: 50%;
@@ -77,6 +157,7 @@ html, body {
     -webkit-backdrop-filter: blur(6px);
 }
 
+/* --- Feedback --- */
 #feedback {
     position: fixed;
     bottom: 24px;
@@ -97,6 +178,7 @@ html, body {
     transition: border-color 0.3s;
 }
 
+/* --- Portrait Warning --- */
 #portrait-warning {
     display: none;
 }

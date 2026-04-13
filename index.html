@@ -11,11 +11,24 @@
     <video id="webcam" autoplay playsinline></video>
     <canvas id="output_canvas"></canvas>
 
+    <!-- Guide overlay: shows animated stick figure + instructions before exercise -->
+    <div id="guide-overlay">
+        <canvas id="guide_canvas"></canvas>
+        <div id="guide-info">
+            <div id="guide-view-tag">SIDE VIEW</div>
+            <div id="guide-title">Plank</div>
+            <div id="guide-instructions">
+                Position your camera to the side so your full body is visible from head to toe.
+            </div>
+            <button id="guide-start-btn">Start Exercise</button>
+        </div>
+    </div>
+
     <div id="controls-overlay">
         <button id="plankBtn" class="btn-exercise active">Plank</button>
         <button id="pushupBtn" class="btn-exercise">Pushups</button>
         <button id="lungeBtn" class="btn-exercise">Lunges</button>
-        <div class="rep-counter">REPS: <span id="rep-count">0</span></div>
+        <div class="rep-counter"><span id="counter-label">REPS: </span><span id="rep-count">0</span></div>
     </div>
 
     <div id="feedback"><p>Loading...</p></div>
