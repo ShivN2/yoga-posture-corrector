@@ -1,10 +1,5 @@
-// This file will store the geometric rules for different poses.
-// Each pose is defined by the target angles of various joints.
-// The angles are defined as a range [min_angle, max_angle] in degrees.
-
-export const poses = {
+var poses = {
     "plank": {
-        // We want the body to be in a straight line, so the hip and knee angles should be close to 180.
         'left_hip_angle': {
             'range': [160, 180],
             'feedback_low': 'Raise your hips.',
@@ -18,7 +13,7 @@ export const poses = {
         'left_knee_angle': {
             'range': [160, 180],
             'feedback_low': 'Straighten your left leg.',
-            'feedback_high': null // No feedback if leg is hyper-extended
+            'feedback_high': null
         },
         'right_knee_angle': {
             'range': [160, 180],
@@ -26,34 +21,69 @@ export const poses = {
             'feedback_high': null
         }
     },
-    // We will add pushups, lunges, etc. here later.
     "pushup_up": {
-        // Similar to plank, but elbows are straight
         'left_elbow_angle': {
             'range': [160, 180],
-            'feedback_low': 'Straighten your left arm.',
+            'feedback_low': 'Straighten your arms.',
             'feedback_high': null
         },
         'right_elbow_angle': {
             'range': [160, 180],
-            'feedback_low': 'Straighten your right arm.',
+            'feedback_low': 'Straighten your arms.',
             'feedback_high': null
         },
-        // ... include hip and knee angles from plank
+        'left_hip_angle': {
+            'range': [160, 180],
+            'feedback_low': 'Raise your hips.',
+            'feedback_high': 'Lower your hips.'
+        },
+        'right_hip_angle': {
+            'range': [160, 180],
+            'feedback_low': 'Raise your hips.',
+            'feedback_high': 'Lower your hips.'
+        },
+        'left_knee_angle': {
+            'range': [160, 180],
+            'feedback_low': 'Straighten your legs.',
+            'feedback_high': null
+        },
+        'right_knee_angle': {
+            'range': [160, 180],
+            'feedback_low': 'Straighten your legs.',
+            'feedback_high': null
+        }
     },
     "pushup_down": {
-        // Elbows should be bent
         'left_elbow_angle': {
             'range': [70, 100],
             'feedback_low': 'Go lower.',
-            'feedback_high': 'Don\'t go quite so low.'
+            'feedback_high': 'Bend your arms more.'
         },
         'right_elbow_angle': {
             'range': [70, 100],
             'feedback_low': 'Go lower.',
-            'feedback_high': 'Don\'t go quite so low.'
+            'feedback_high': 'Bend your arms more.'
         },
-        // ... include hip and knee angles from plank
+        'left_hip_angle': {
+            'range': [160, 180],
+            'feedback_low': 'Keep your hips up.',
+            'feedback_high': 'Lower your hips.'
+        },
+        'right_hip_angle': {
+            'range': [160, 180],
+            'feedback_low': 'Keep your hips up.',
+            'feedback_high': 'Lower your hips.'
+        },
+        'left_knee_angle': {
+            'range': [160, 180],
+            'feedback_low': 'Keep your legs straight.',
+            'feedback_high': null
+        },
+        'right_knee_angle': {
+            'range': [160, 180],
+            'feedback_low': 'Keep your legs straight.',
+            'feedback_high': null
+        }
     },
     "lunge": {
         'left_knee_angle': {
@@ -66,7 +96,7 @@ export const poses = {
             'feedback_low': 'Bend your right knee more.',
             'feedback_high': 'Bend your right knee less.'
         },
-         'left_hip_angle': {
+        'left_hip_angle': {
             'range': [80, 110],
             'feedback_low': 'Lower your hips.',
             'feedback_high': 'Raise your hips.'

@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Posture Corrector</title>
     <link rel="stylesheet" href="style.css">
-    <!-- MediaPipe Script Loading -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675469404/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675469404/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
 </head>
 <body>
     <h1>AI Posture Corrector</h1>
@@ -22,15 +18,20 @@
                 <h3>REPS: <span id="rep-count">0</span></h3>
             </div>
         </div>
-        <div class="container">
-            <!-- The video element is now hidden, we only show the canvas -->
-            <video id="webcam" autoplay playsinline style="display: none;"></video>
-            <canvas id="output_canvas" width="1280" height="720"></canvas>
-        </div>
-        <div id="feedback">
-            <p>Loading...</p>
+        <div class="video-wrapper">
+            <video id="webcam" autoplay playsinline></video>
+            <canvas id="output_canvas"></canvas>
+            <div id="feedback">
+                <p>Loading...</p>
+            </div>
         </div>
     </div>
-    <script src="script.js" type="module"></script>
+    <!-- Load MediaPipe and app scripts at end of body -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js" crossorigin="anonymous"></script>
+    <script src="utils.js"></script>
+    <script src="poses.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
