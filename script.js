@@ -149,6 +149,7 @@
     // --- State ---
     var lastSpokenFeedback = '';
     var currentPose = 'plank';
+    var currentDifficulty = 'beginner';
     var repCounter = 0;
     var pushupStage = 'up';
     var showingGuide = true;
@@ -160,6 +161,10 @@
     var holdTimerStart = 0;
     var holdTimerActive = false;
     var lastGoodFormTime = 0;
+
+    // Escalating speech backoff state
+    var speechRepeatCount = 0;
+    var SPEECH_BACKOFF = [3000, 8000, 15000, 30000]; // escalating cooldowns in ms
 
     // --- Guide Animation ---
 
@@ -445,6 +450,20 @@
         hideGuide();
     });
 
+    // Difficulty buttons
+    var diffButtons = document.querySelectorAll('.btn-diff');
+    for (var di = 0; di < diffButtons.length; di++) {
+        diffButtons[di].addEventListener('click', function () {
+            currentDifficulty = this.getAttribute('data-level');
+            for (var dj = 0; dj < diffButtons.length; dj++) {
+                diffButtons[dj].classList.remove('active');
+            }
+            this.classList.add('active');
+            speechRepeatCount = 0;
+            lastSpokenFeedback = '';
+        });
+    }
+
     function updateActiveButton(activeBtn) {
         var buttons = document.querySelectorAll('.btn-exercise');
         for (var i = 0; i < buttons.length; i++) {
@@ -469,13 +488,22 @@
     speaker.rate = 1.0;
     speaker.lang = 'en-US';
     var lastSpeakTime = 0;
-    var SPEAK_COOLDOWN = 3000;
 
     function speak(text) {
         var now = Date.now();
-        if (text && text !== lastSpokenFeedback && (now - lastSpeakTime) > SPEAK_COOLDOWN) {
+        if (!text) return;
+
+        // Different message or good form resets the backoff
+        if (text !== lastSpokenFeedback) {
+            speechRepeatCount = 0;
             lastSpokenFeedback = text;
+            lastSpeakTime = 0; // allow immediate speak
+        }
+
+        var cooldown = SPEECH_BACKOFF[Math.min(speechRepeatCount, SPEECH_BACKOFF.length - 1)];
+        if ((now - lastSpeakTime) > cooldown) {
             lastSpeakTime = now;
+            speechRepeatCount++;
             window.speechSynthesis.cancel();
             speaker.text = text;
             window.speechSynthesis.speak(speaker);
@@ -678,7 +706,7 @@
                 'front_hip_angle': [fHipIdx],
                 'torso_upright': [11, 12, 23, 24]
             };
-            poseRules = poses.lunge;
+            poseRules = poses[currentDifficulty].lunge;
 
         } else {
             angles = {
@@ -697,7 +725,7 @@
             };
 
             if (currentPose === 'pushup') {
-                poseRules = poses['pushup_' + pushupStage];
+                poseRules = poses[currentDifficulty]['pushup_' + pushupStage];
                 var avgElbow = (angles.left_elbow_angle + angles.right_elbow_angle) / 2;
                 if (pushupStage === 'up' && avgElbow < 100) {
                     pushupStage = 'down';
@@ -707,7 +735,7 @@
                     updateTimerDisplay();
                 }
             } else {
-                poseRules = poses.plank;
+                poseRules = poses[currentDifficulty].plank;
             }
         }
 
@@ -760,6 +788,12 @@
         var feedbackMessage = 'Great Form! Hold it.';
         var feedbackColor = '#4caf50';
         var isGoodForm = true;
+
+        if (violations.length === 0) {
+            // Good form: reset speech backoff so next correction is immediate
+            speechRepeatCount = 0;
+            lastSpokenFeedback = '';
+        }
 
         if (violations.length > 0) {
             violations.sort(function (a, b) {
